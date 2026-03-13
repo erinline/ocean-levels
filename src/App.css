@@ -1,0 +1,187 @@
+* {
+  box-sizing: border-box;
+}
+
+.app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.map-container {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Bottom panel ── */
+.panel {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  background: rgba(10, 20, 40, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 18px 24px 14px;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  z-index: 10;
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sea-level-value {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: #4db3ff;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.scenario-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: right;
+  max-width: 200px;
+}
+
+/* ── Slider ── */
+.slider-wrapper {
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    #2980ff var(--progress, 0%),
+    rgba(255, 255, 255, 0.15) var(--progress, 0%)
+  );
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4db3ff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(77, 179, 255, 0.6);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4db3ff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 8px rgba(77, 179, 255, 0.6);
+  cursor: pointer;
+}
+
+/* ── Tick marks ── */
+.ticks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+}
+
+/* ── Slider labels ── */
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+}
+
+.slider-labels span:nth-child(2) {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Token error overlay ── */
+.token-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: #0a0e1a;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+
+.token-error-box {
+  max-width: 480px;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.token-error-box h1 {
+  font-size: 1.5rem;
+  margin-bottom: 16px;
+  color: #4db3ff;
+}
+
+.token-error-box p {
+  color: rgba(255, 255, 255, 0.75);
+  margin: 10px 0;
+  line-height: 1.6;
+}
+
+.token-error-box pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: #7ee8a2;
+  margin: 14px 0;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.token-error-box code {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.85em;
+}
