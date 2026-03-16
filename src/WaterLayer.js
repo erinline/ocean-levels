@@ -31,6 +31,7 @@ export class WaterLayer {
     this.type = 'custom'
     this.renderingMode = '3d'
     this._seaLevelMeters = 0
+    this._visible = true
     this._dirty = true
     this._program = null
     this._buffer = null
@@ -105,8 +106,13 @@ export class WaterLayer {
     this._dirty = false
   }
 
+  setVisible(visible) {
+    this._visible = visible
+    if (this.map) this.map.triggerRepaint()
+  }
+
   render(gl, matrix) {
-    if (!this._cornersXY) return
+    if (!this._cornersXY || !this._visible) return
 
     if (this._dirty) {
       this._buildVertices(gl)

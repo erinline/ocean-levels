@@ -134,6 +134,60 @@
   letter-spacing: 0.08em;
 }
 
+/* ── View toggle pill ── */
+.view-toggle {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 10; display: flex;
+  background: rgba(10, 20, 40, 0.72);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 100px;
+  padding: 4px; gap: 2px;
+}
+.toggle-btn {
+  padding: 8px 20px; border: none; border-radius: 100px;
+  background: transparent; color: rgba(255,255,255,0.55);
+  font-size: 0.85rem; font-weight: 500; cursor: pointer;
+  transition: background 0.2s, color 0.2s; white-space: nowrap;
+}
+.toggle-btn.active { background: rgba(77,179,255,0.25); color: #4db3ff; }
+
+/* ── Notes card — top-right overlay ── */
+.notes-card {
+  position: fixed; top: 72px; right: 20px; z-index: 10;
+  width: min(320px, calc(100vw - 40px));
+  background: rgba(10, 20, 40, 0.72);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+  padding: 14px 16px;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+.notes-title {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255,255,255,0.4);
+  margin-bottom: 8px;
+}
+.notes-entry { margin-bottom: 6px; }
+.notes-location {
+  display: block; font-size: 0.75rem; font-weight: 600; color: #4db3ff;
+  margin-bottom: 2px;
+}
+.notes-text { font-size: 0.8rem; color: rgba(255,255,255,0.75); line-height: 1.4; }
+
+/* ── Population legend ── */
+.pop-legend {
+  display: flex; gap: 12px; font-size: 0.78rem; flex-wrap: wrap;
+  color: rgba(255,255,255,0.6); margin-bottom: 10px; align-items: center;
+}
+.legend-dot {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 50%; margin-right: 4px;
+}
+.legend-dot.elite    { background: #4db3ff; }
+.legend-dot.server   { background: #22c55e; }
+.legend-dot.civilian { background: #e2e8f0; }
+.legend-dot.abandoned{ background: #4b5563; }
+
 /* ── Token error overlay ── */
 .token-error {
   display: flex;
