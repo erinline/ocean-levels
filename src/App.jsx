@@ -11,13 +11,64 @@ const TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const MAX_METERS = 30
 const TICK_POSITIONS = SCENARIOS.filter(s => s.maxMeters > 0).map(s => s.maxMeters)
 
-const CAMERA_SEA_LEVEL = { center: [-71.35, 42.35], zoom: 11, pitch: 50, bearing: -15, duration: 2000, essential: true }
+const CAMERA_BOSTON   = { center: [-71.35, 42.35], zoom: 11, pitch: 50, bearing: -15, duration: 2000, essential: true }
 const CAMERA_POPULATION = { center: [-98.5795, 39.8283], zoom: 4, pitch: 0, bearing: 0, duration: 2500, essential: true }
 
+const SF_CORNERS = [
+  [-123.0, 36.15],
+  [-121.7, 36.15],
+  [-123.0, 38.15],
+  [-121.7, 38.15],
+]
+const SF_CENTER = [-122.35, 37.65]
+
+const FOG_SETTINGS = {
+  color: 'rgb(186, 210, 235)',
+  'high-color': 'rgb(36, 92, 223)',
+  'horizon-blend': 0.02,
+  'space-color': 'rgb(11, 11, 25)',
+  'star-intensity': 0.6,
+}
+
+function setupBaseMap(map) {
+  map.addSource('mapbox-dem', {
+    type: 'raster-dem',
+    url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+    tileSize: 512,
+    maxzoom: 14,
+  })
+  map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
+  map.setFog(FOG_SETTINGS)
+
+  const firstSymbol = map.getStyle().layers.find(l => l.type === 'symbol')?.id
+  map.addLayer(
+    {
+      id: '3d-buildings',
+      source: 'composite',
+      'source-layer': 'building',
+      filter: ['==', 'extrude', 'true'],
+      type: 'fill-extrusion',
+      minzoom: 12,
+      paint: {
+        'fill-extrusion-color': '#aaa',
+        'fill-extrusion-height': ['get', 'height'],
+        'fill-extrusion-base': ['get', 'min_height'],
+        'fill-extrusion-opacity': 0.8,
+      },
+    },
+    firstSymbol
+  )
+}
+
 export default function App() {
-  const mapContainerRef = useRef(null)
-  const mapRef = useRef(null)
-  const waterLayerRef = useRef(null)
+  const bostonContainerRef = useRef(null)
+  const sfContainerRef     = useRef(null)
+  const bostonMapRef  = useRef(null)
+  const sfMapRef      = useRef(null)
+  const bostonWaterRef = useRef(null)
+  const sfWaterRef     = useRef(null)
+  const pitchInitiatorRef = useRef(null)
+
   const [seaLevel, setSeaLevel] = useState(0)
   const [activeView, setActiveView] = useState('sealevel')
   const [year, setYear] = useState(MIN_YEAR)
@@ -30,8 +81,9 @@ export default function App() {
 
     mapboxgl.accessToken = TOKEN
 
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
+    // ── Boston map ──────────────────────────────────────────────────────────
+    const bostonMap = new mapboxgl.Map({
+      container: bostonContainerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
       center: [-71.35, 42.35],
       zoom: 11,
@@ -39,61 +91,54 @@ export default function App() {
       bearing: -15,
       antialias: true,
     })
+    bostonMapRef.current = bostonMap
 
-    mapRef.current = map
+    // ── SF Bay map ──────────────────────────────────────────────────────────
+    const sfMap = new mapboxgl.Map({
+      container: sfContainerRef.current,
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [-122.37, 37.65],
+      zoom: 10,
+      pitch: 50,
+      bearing: 15,
+      antialias: true,
+    })
+    sfMapRef.current = sfMap
 
-    map.on('style.load', () => {
-      // Terrain
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512,
-        maxzoom: 14,
-      })
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
+    // ── Pitch sync (tilt only, no pan / orbit) ──────────────────────────────
+    bostonMap.on('pitchstart', () => {
+      if (!pitchInitiatorRef.current) pitchInitiatorRef.current = 'boston'
+    })
+    bostonMap.on('pitch', () => {
+      if (pitchInitiatorRef.current === 'boston') sfMap.setPitch(bostonMap.getPitch())
+    })
+    bostonMap.on('pitchend', () => {
+      if (pitchInitiatorRef.current === 'boston') pitchInitiatorRef.current = null
+    })
 
-      // Atmosphere
-      map.setFog({
-        color: 'rgb(186, 210, 235)',
-        'high-color': 'rgb(36, 92, 223)',
-        'horizon-blend': 0.02,
-        'space-color': 'rgb(11, 11, 25)',
-        'star-intensity': 0.6,
-      })
+    sfMap.on('pitchstart', () => {
+      if (!pitchInitiatorRef.current) pitchInitiatorRef.current = 'sf'
+    })
+    sfMap.on('pitch', () => {
+      if (pitchInitiatorRef.current === 'sf') bostonMap.setPitch(sfMap.getPitch())
+    })
+    sfMap.on('pitchend', () => {
+      if (pitchInitiatorRef.current === 'sf') pitchInitiatorRef.current = null
+    })
 
-      // 3D buildings — insert before first symbol layer
-      const layers = map.getStyle().layers
-      const firstSymbol = layers.find(l => l.type === 'symbol')?.id
+    // ── Boston style.load ───────────────────────────────────────────────────
+    bostonMap.on('style.load', () => {
+      setupBaseMap(bostonMap)
 
-      map.addLayer(
-        {
-          id: '3d-buildings',
-          source: 'composite',
-          'source-layer': 'building',
-          filter: ['==', 'extrude', 'true'],
-          type: 'fill-extrusion',
-          minzoom: 12,
-          paint: {
-            'fill-extrusion-color': '#aaa',
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'min_height'],
-            'fill-extrusion-opacity': 0.8,
-          },
-        },
-        firstSymbol
-      )
-
-      // Water layer
       const waterLayer = new WaterLayer()
-      waterLayerRef.current = waterLayer
-      map.addLayer(waterLayer)
+      bostonWaterRef.current = waterLayer
+      bostonMap.addLayer(waterLayer)
 
-      // Population source (tracked cities — drives circles, glow, labels)
-      map.addSource('population', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      // Heatmap source (background metros + tracked cities — full US coverage)
-      map.addSource('population-heatmap-data', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      // Population sources & layers (boston map only)
+      bostonMap.addSource('population', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      bostonMap.addSource('population-heatmap-data', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
-      map.addLayer({
+      bostonMap.addLayer({
         id: 'population-heatmap',
         type: 'heatmap',
         source: 'population-heatmap-data',
@@ -116,8 +161,7 @@ export default function App() {
         }
       })
 
-      // Glow halos for Elite (blue) and Server (green) cities
-      map.addLayer({
+      bostonMap.addLayer({
         id: 'population-glow',
         type: 'circle',
         source: 'population',
@@ -146,7 +190,7 @@ export default function App() {
         }
       })
 
-      map.addLayer({
+      bostonMap.addLayer({
         id: 'population-circles',
         type: 'circle',
         source: 'population',
@@ -179,7 +223,7 @@ export default function App() {
         }
       })
 
-      map.addLayer({
+      bostonMap.addLayer({
         id: 'population-labels',
         type: 'symbol',
         source: 'population',
@@ -199,27 +243,39 @@ export default function App() {
       })
     })
 
+    // ── SF style.load ────────────────────────────────────────────────────────
+    sfMap.on('style.load', () => {
+      setupBaseMap(sfMap)
+
+      const sfWater = new WaterLayer({
+        id: 'water-plane-sf',
+        corners: SF_CORNERS,
+        center: SF_CENTER,
+      })
+      sfWaterRef.current = sfWater
+      sfMap.addLayer(sfWater)
+    })
+
     return () => {
-      map.remove()
-      mapRef.current = null
-      waterLayerRef.current = null
+      bostonMap.remove()
+      sfMap.remove()
+      bostonMapRef.current = null
+      sfMapRef.current     = null
+      bostonWaterRef.current = null
+      sfWaterRef.current     = null
     }
   }, [tokenValid])
 
-  // View switch effect
+  // ── View switch ────────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = mapRef.current
+    const map = bostonMapRef.current
     if (!map || !map.isStyleLoaded()) return
+
     if (activeView === 'sealevel') {
-      map.flyTo(CAMERA_SEA_LEVEL)
-      map.setFog({
-        color: 'rgb(186, 210, 235)',
-        'high-color': 'rgb(36, 92, 223)',
-        'horizon-blend': 0.02,
-        'space-color': 'rgb(11, 11, 25)',
-        'star-intensity': 0.6,
-      })
-      waterLayerRef.current?.setVisible(true)
+      map.flyTo(CAMERA_BOSTON)
+      map.setFog(FOG_SETTINGS)
+      bostonWaterRef.current?.setVisible(true)
+      sfWaterRef.current?.setVisible(true)
       map.setLayoutProperty('population-heatmap', 'visibility', 'none')
       map.setLayoutProperty('population-glow', 'visibility', 'none')
       map.setLayoutProperty('population-circles', 'visibility', 'none')
@@ -227,7 +283,8 @@ export default function App() {
     } else {
       map.flyTo(CAMERA_POPULATION)
       map.setFog(null)
-      waterLayerRef.current?.setVisible(false)
+      bostonWaterRef.current?.setVisible(false)
+      sfWaterRef.current?.setVisible(false)
       map.setLayoutProperty('population-heatmap', 'visibility', 'visible')
       map.setLayoutProperty('population-glow', 'visibility', 'visible')
       map.setLayoutProperty('population-circles', 'visibility', 'visible')
@@ -237,12 +294,18 @@ export default function App() {
       setUsTotal(getInterpolatedUSTotal(year))
       setYearNotes(getNotesForYear(year))
     }
+
+    // Resize after layout shift (boston expands/contracts between 50% and 100%)
+    requestAnimationFrame(() => {
+      bostonMapRef.current?.resize()
+      sfMapRef.current?.resize()
+    })
   }, [activeView])
 
-  // Year effect — fires on every slider tick
+  // ── Year effect ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (activeView !== 'population') return
-    const map = mapRef.current
+    const map = bostonMapRef.current
     if (!map || !map.getSource('population')) return
     map.getSource('population').setData(buildGeoJSON(getInterpolatedCities(year)))
     map.getSource('population-heatmap-data').setData(buildHeatmapGeoJSON(year))
@@ -253,7 +316,8 @@ export default function App() {
   function handleSliderChange(e) {
     const value = parseFloat(e.target.value)
     setSeaLevel(value)
-    waterLayerRef.current?.setSeaLevel(value)
+    bostonWaterRef.current?.setSeaLevel(value)
+    sfWaterRef.current?.setSeaLevel(value)
   }
 
   const progressPct = (seaLevel / MAX_METERS) * 100
@@ -274,9 +338,22 @@ export default function App() {
     )
   }
 
+  const isSplit = activeView === 'sealevel'
+
   return (
     <div className="app">
-      <div ref={mapContainerRef} className="map-container" />
+      <div className={`maps-split${isSplit ? '' : ' population-mode'}`}>
+        <div className="map-pane">
+          {isSplit && <span className="map-label">Boston</span>}
+          <div ref={bostonContainerRef} className="map-container" />
+        </div>
+        <div className={`map-pane sf-pane${isSplit ? '' : ' hidden'}`}>
+          <span className="map-label">SF Bay</span>
+          <div ref={sfContainerRef} className="map-container" />
+        </div>
+      </div>
+
+      {isSplit && <div className="map-divider" />}
 
       <div className="view-toggle">
         <button className={`toggle-btn ${activeView === 'sealevel' ? 'active' : ''}`} onClick={() => setActiveView('sealevel')}>Sea Level</button>

@@ -26,8 +26,8 @@ function compileShader(gl, type, src) {
 }
 
 export class WaterLayer {
-  constructor() {
-    this.id = 'water-plane'
+  constructor({ id = 'water-plane', corners, center } = {}) {
+    this.id = id
     this.type = 'custom'
     this.renderingMode = '3d'
     this._seaLevelMeters = 0
@@ -37,13 +37,15 @@ export class WaterLayer {
     this._buffer = null
     this._aPosition = -1
     this._uMatrix = null
-    // Quad corners: [lng, lat]
-    this._corners = [
+    // Quad corners: [lng, lat] — order: SW, SE, NW, NE
+    this._corners = corners || [
       [-72.0, 41.9],
       [-70.5, 41.9],
       [-72.0, 42.8],
       [-70.5, 42.8],
     ]
+    // Reference point used to sample Mercator Z at a given elevation
+    this._center = center || [-71.35, 42.35]
     // Cached Mercator XY (z computed per sea level change)
     this._cornersXY = null
   }
@@ -82,16 +84,16 @@ export class WaterLayer {
 
   _buildVertices(gl) {
     const z = mapboxgl.MercatorCoordinate.fromLngLat(
-      [-71.35, 42.35],
+      this._center,
       this._seaLevelMeters
     ).z
 
     // Triangle strip: TL, BL, TR, BR
     const [tl, bl, tr, br] = [
-      this._cornersXY[2], // [-72.0, 42.8]
-      this._cornersXY[0], // [-72.0, 41.9]
-      this._cornersXY[3], // [-70.5, 42.8]
-      this._cornersXY[1], // [-70.5, 41.9]
+      this._cornersXY[2], // NW
+      this._cornersXY[0], // SW
+      this._cornersXY[3], // NE
+      this._cornersXY[1], // SE
     ]
 
     const verts = new Float32Array([
