@@ -60,6 +60,111 @@ function setupBaseMap(map) {
   )
 }
 
+function addPopulationLayers(map, year) {
+  map.addSource('population', { type: 'geojson', data: buildGeoJSON(getInterpolatedCities(year)) })
+  map.addSource('population-heatmap-data', { type: 'geojson', data: buildHeatmapGeoJSON(year) })
+
+  map.addLayer({
+    id: 'population-heatmap',
+    type: 'heatmap',
+    source: 'population-heatmap-data',
+    paint: {
+      'heatmap-weight': ['get', 'popRatio'],
+      'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 3, 0.35, 5, 0.6, 7, 1.0],
+      'heatmap-color': [
+        'interpolate', ['linear'], ['heatmap-density'],
+        0,    'rgba(0,0,0,0)',
+        0.08, 'rgba(80,0,10,0.55)',
+        0.25, 'rgba(180,0,0,0.82)',
+        0.45, 'rgba(240,40,0,0.90)',
+        0.65, 'rgba(255,120,0,0.94)',
+        0.85, 'rgba(255,210,50,0.97)',
+        1.0,  'rgba(255,255,200,1)',
+      ],
+      'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 3, 65, 5, 50, 7, 35],
+      'heatmap-opacity': 0.72,
+    }
+  })
+
+  map.addLayer({
+    id: 'population-glow',
+    type: 'circle',
+    source: 'population',
+    paint: {
+      'circle-radius': [
+        'case', ['==', ['get', 'population'], 0], 0,
+        ['case', ['==', ['get', 'type'], 'Elite'],
+          ['interpolate', ['linear'], ['zoom'],
+            3, ['max', 10, ['*', 48, ['sqrt', ['get', 'popRatio']]]],
+            6, ['max', 12, ['*', 105, ['sqrt', ['get', 'popRatio']]]],
+          ],
+          ['case', ['==', ['get', 'type'], 'Server'],
+            ['interpolate', ['linear'], ['zoom'],
+              3, ['max', 6, ['*', 30, ['sqrt', ['get', 'popRatio']]]],
+              6, ['max', 8, ['*', 72, ['sqrt', ['get', 'popRatio']]]],
+            ],
+            0
+          ]
+        ]
+      ],
+      'circle-color': ['match', ['get', 'type'], 'Elite', '#4db3ff', '#22c55e'],
+      'circle-opacity': 0.13,
+      'circle-blur': 1.0,
+      'circle-stroke-width': 0,
+    }
+  })
+
+  map.addLayer({
+    id: 'population-circles',
+    type: 'circle',
+    source: 'population',
+    paint: {
+      'circle-radius': [
+        'case', ['==', ['get', 'population'], 0], 4,
+        ['interpolate', ['linear'], ['zoom'],
+          3, ['max', 3, ['*', 22, ['sqrt', ['get', 'popRatio']]]],
+          6, ['max', 4, ['*', 60, ['sqrt', ['get', 'popRatio']]]],
+        ]
+      ],
+      'circle-color': [
+        'match', ['get', 'type'],
+        'Elite',     '#4db3ff',
+        'Server',    '#22c55e',
+        'Civilian',  '#e2e8f0',
+        'Abandoned', '#4b5563',
+        '#ffffff'
+      ],
+      'circle-opacity': ['case', ['==', ['get', 'type'], 'Abandoned'], 0.45, 0.88],
+      'circle-stroke-width': 1.5,
+      'circle-stroke-color': [
+        'match', ['get', 'type'],
+        'Elite',     'rgba(77,179,255,0.7)',
+        'Server',    'rgba(34,197,94,0.5)',
+        'Abandoned', 'rgba(255,255,255,0.1)',
+        'rgba(255,255,255,0.35)'
+      ],
+    }
+  })
+
+  map.addLayer({
+    id: 'population-labels',
+    type: 'symbol',
+    source: 'population',
+    layout: {
+      'text-field': [
+        'case', ['==', ['get', 'population'], 0],
+        ['concat', ['get', 'name'], '\nAbandoned'],
+        ['format', ['get', 'name'], { 'font-scale': 1.0 }, '\n', {},
+          ['number-format', ['get', 'population'], { locale: 'en-US' }], { 'font-scale': 0.75 }]
+      ],
+      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+      'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.2],
+      'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.7)', 'text-halo-width': 1.5 }
+  })
+}
+
 export default function App() {
   const bostonContainerRef = useRef(null)
   const sfContainerRef     = useRef(null)
@@ -68,6 +173,10 @@ export default function App() {
   const bostonWaterRef = useRef(null)
   const sfWaterRef     = useRef(null)
   const pitchInitiatorRef = useRef(null)
+  const activeViewRef = useRef('sealevel')
+  const yearRef = useRef(MIN_YEAR)
+  const seaLevelRef = useRef(0)
+  const initializedRef = useRef(false)
 
   const [seaLevel, setSeaLevel] = useState(0)
   const [activeView, setActiveView] = useState('sealevel')
@@ -81,10 +190,10 @@ export default function App() {
 
     mapboxgl.accessToken = TOKEN
 
-    // ── Boston map ──────────────────────────────────────────────────────────
+    // ── Boston map (street style for sealevel tab) ───────────────────────────
     const bostonMap = new mapboxgl.Map({
       container: bostonContainerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: [-71.35, 42.35],
       zoom: 11,
       pitch: 50,
@@ -93,10 +202,10 @@ export default function App() {
     })
     bostonMapRef.current = bostonMap
 
-    // ── SF Bay map ──────────────────────────────────────────────────────────
+    // ── SF Bay map (always street style — only shown in sealevel tab) ────────
     const sfMap = new mapboxgl.Map({
       container: sfContainerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/streets-v12',
       center: [-122.37, 37.65],
       zoom: 10,
       pitch: 50,
@@ -126,120 +235,29 @@ export default function App() {
       if (pitchInitiatorRef.current === 'sf') pitchInitiatorRef.current = null
     })
 
-    // ── Boston style.load ───────────────────────────────────────────────────
+    // ── Boston style.load — handles both sealevel and population modes ───────
     bostonMap.on('style.load', () => {
-      setupBaseMap(bostonMap)
+      initializedRef.current = true
 
-      const waterLayer = new WaterLayer()
-      bostonWaterRef.current = waterLayer
-      bostonMap.addLayer(waterLayer)
+      if (activeViewRef.current === 'sealevel') {
+        setupBaseMap(bostonMap)
+        const waterLayer = new WaterLayer()
+        bostonWaterRef.current = waterLayer
+        bostonMap.addLayer(waterLayer)
+        waterLayer.setSeaLevel(seaLevelRef.current)
+        bostonMap.flyTo(CAMERA_BOSTON)
+      } else {
+        bostonMap.setFog(null)
+        const yr = yearRef.current
+        addPopulationLayers(bostonMap, yr)
+        bostonMap.flyTo(CAMERA_POPULATION)
+        setUsTotal(getInterpolatedUSTotal(yr))
+        setYearNotes(getNotesForYear(yr))
+      }
 
-      // Population sources & layers (boston map only)
-      bostonMap.addSource('population', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      bostonMap.addSource('population-heatmap-data', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-
-      bostonMap.addLayer({
-        id: 'population-heatmap',
-        type: 'heatmap',
-        source: 'population-heatmap-data',
-        layout: { visibility: 'none' },
-        paint: {
-          'heatmap-weight': ['get', 'popRatio'],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 3, 0.35, 5, 0.6, 7, 1.0],
-          'heatmap-color': [
-            'interpolate', ['linear'], ['heatmap-density'],
-            0,    'rgba(0,0,0,0)',
-            0.08, 'rgba(80,0,10,0.55)',
-            0.25, 'rgba(180,0,0,0.82)',
-            0.45, 'rgba(240,40,0,0.90)',
-            0.65, 'rgba(255,120,0,0.94)',
-            0.85, 'rgba(255,210,50,0.97)',
-            1.0,  'rgba(255,255,200,1)',
-          ],
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 3, 65, 5, 50, 7, 35],
-          'heatmap-opacity': 0.72,
-        }
-      })
-
-      bostonMap.addLayer({
-        id: 'population-glow',
-        type: 'circle',
-        source: 'population',
-        layout: { visibility: 'none' },
-        paint: {
-          'circle-radius': [
-            'case', ['==', ['get', 'population'], 0], 0,
-            ['case', ['==', ['get', 'type'], 'Elite'],
-              ['interpolate', ['linear'], ['zoom'],
-                3, ['max', 10, ['*', 48, ['sqrt', ['get', 'popRatio']]]],
-                6, ['max', 12, ['*', 105, ['sqrt', ['get', 'popRatio']]]],
-              ],
-              ['case', ['==', ['get', 'type'], 'Server'],
-                ['interpolate', ['linear'], ['zoom'],
-                  3, ['max', 6, ['*', 30, ['sqrt', ['get', 'popRatio']]]],
-                  6, ['max', 8, ['*', 72, ['sqrt', ['get', 'popRatio']]]],
-                ],
-                0
-              ]
-            ]
-          ],
-          'circle-color': ['match', ['get', 'type'], 'Elite', '#4db3ff', '#22c55e'],
-          'circle-opacity': 0.13,
-          'circle-blur': 1.0,
-          'circle-stroke-width': 0,
-        }
-      })
-
-      bostonMap.addLayer({
-        id: 'population-circles',
-        type: 'circle',
-        source: 'population',
-        layout: { visibility: 'none' },
-        paint: {
-          'circle-radius': [
-            'case', ['==', ['get', 'population'], 0], 4,
-            ['interpolate', ['linear'], ['zoom'],
-              3, ['max', 3, ['*', 22, ['sqrt', ['get', 'popRatio']]]],
-              6, ['max', 4, ['*', 60, ['sqrt', ['get', 'popRatio']]]],
-            ]
-          ],
-          'circle-color': [
-            'match', ['get', 'type'],
-            'Elite',     '#4db3ff',
-            'Server',    '#22c55e',
-            'Civilian',  '#e2e8f0',
-            'Abandoned', '#4b5563',
-            '#ffffff'
-          ],
-          'circle-opacity': ['case', ['==', ['get', 'type'], 'Abandoned'], 0.45, 0.88],
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': [
-            'match', ['get', 'type'],
-            'Elite',     'rgba(77,179,255,0.7)',
-            'Server',    'rgba(34,197,94,0.5)',
-            'Abandoned', 'rgba(255,255,255,0.1)',
-            'rgba(255,255,255,0.35)'
-          ],
-        }
-      })
-
-      bostonMap.addLayer({
-        id: 'population-labels',
-        type: 'symbol',
-        source: 'population',
-        layout: {
-          visibility: 'none',
-          'text-field': [
-            'case', ['==', ['get', 'population'], 0],
-            ['concat', ['get', 'name'], '\nAbandoned'],
-            ['format', ['get', 'name'], { 'font-scale': 1.0 }, '\n', {},
-              ['number-format', ['get', 'population'], { locale: 'en-US' }], { 'font-scale': 0.75 }]
-          ],
-          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-          'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.2],
-          'text-allow-overlap': false,
-        },
-        paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.7)', 'text-halo-width': 1.5 }
+      requestAnimationFrame(() => {
+        bostonMapRef.current?.resize()
+        sfMapRef.current?.resize()
       })
     })
 
@@ -263,47 +281,33 @@ export default function App() {
       sfMapRef.current     = null
       bostonWaterRef.current = null
       sfWaterRef.current     = null
+      initializedRef.current = false
     }
   }, [tokenValid])
 
   // ── View switch ────────────────────────────────────────────────────────────
   useEffect(() => {
+    activeViewRef.current = activeView
+
+    // Skip until maps are initialized
+    if (!initializedRef.current) return
     const map = bostonMapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
 
     if (activeView === 'sealevel') {
-      map.flyTo(CAMERA_BOSTON)
-      map.setFog(FOG_SETTINGS)
-      bostonWaterRef.current?.setVisible(true)
       sfWaterRef.current?.setVisible(true)
-      map.setLayoutProperty('population-heatmap', 'visibility', 'none')
-      map.setLayoutProperty('population-glow', 'visibility', 'none')
-      map.setLayoutProperty('population-circles', 'visibility', 'none')
-      map.setLayoutProperty('population-labels', 'visibility', 'none')
+      // Switch Boston to street style — style.load will re-add sealevel layers
+      map.setStyle('mapbox://styles/mapbox/streets-v12')
     } else {
-      map.flyTo(CAMERA_POPULATION)
-      map.setFog(null)
-      bostonWaterRef.current?.setVisible(false)
       sfWaterRef.current?.setVisible(false)
-      map.setLayoutProperty('population-heatmap', 'visibility', 'visible')
-      map.setLayoutProperty('population-glow', 'visibility', 'visible')
-      map.setLayoutProperty('population-circles', 'visibility', 'visible')
-      map.setLayoutProperty('population-labels', 'visibility', 'visible')
-      map.getSource('population')?.setData(buildGeoJSON(getInterpolatedCities(year)))
-      map.getSource('population-heatmap-data')?.setData(buildHeatmapGeoJSON(year))
-      setUsTotal(getInterpolatedUSTotal(year))
-      setYearNotes(getNotesForYear(year))
+      // Switch Boston to dark style — style.load will add population layers
+      map.setStyle('mapbox://styles/mapbox/dark-v11')
     }
-
-    // Resize after layout shift (boston expands/contracts between 50% and 100%)
-    requestAnimationFrame(() => {
-      bostonMapRef.current?.resize()
-      sfMapRef.current?.resize()
-    })
   }, [activeView])
 
   // ── Year effect ────────────────────────────────────────────────────────────
   useEffect(() => {
+    yearRef.current = year
     if (activeView !== 'population') return
     const map = bostonMapRef.current
     if (!map || !map.getSource('population')) return
@@ -315,6 +319,7 @@ export default function App() {
 
   function handleSliderChange(e) {
     const value = parseFloat(e.target.value)
+    seaLevelRef.current = value
     setSeaLevel(value)
     bostonWaterRef.current?.setSeaLevel(value)
     sfWaterRef.current?.setSeaLevel(value)
