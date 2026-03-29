@@ -214,24 +214,32 @@ export default function App() {
     })
     sfMapRef.current = sfMap
 
-    // ── Pitch sync (tilt only, no pan / orbit) ──────────────────────────────
-    bostonMap.on('pitchstart', () => {
-      if (!pitchInitiatorRef.current) pitchInitiatorRef.current = 'boston'
+    // ── Sync zoom, pitch, bearing — pan stays independent ───────────────────
+    function syncCamera(source, target) {
+      target.jumpTo({
+        zoom: source.getZoom(),
+        pitch: source.getPitch(),
+        bearing: source.getBearing(),
+      })
+    }
+
+    bostonMap.on('movestart', (e) => {
+      if (e.originalEvent && !pitchInitiatorRef.current) pitchInitiatorRef.current = 'boston'
     })
-    bostonMap.on('pitch', () => {
-      if (pitchInitiatorRef.current === 'boston') sfMap.setPitch(bostonMap.getPitch())
+    bostonMap.on('move', () => {
+      if (pitchInitiatorRef.current === 'boston') syncCamera(bostonMap, sfMap)
     })
-    bostonMap.on('pitchend', () => {
+    bostonMap.on('moveend', () => {
       if (pitchInitiatorRef.current === 'boston') pitchInitiatorRef.current = null
     })
 
-    sfMap.on('pitchstart', () => {
-      if (!pitchInitiatorRef.current) pitchInitiatorRef.current = 'sf'
+    sfMap.on('movestart', (e) => {
+      if (e.originalEvent && !pitchInitiatorRef.current) pitchInitiatorRef.current = 'sf'
     })
-    sfMap.on('pitch', () => {
-      if (pitchInitiatorRef.current === 'sf') bostonMap.setPitch(sfMap.getPitch())
+    sfMap.on('move', () => {
+      if (pitchInitiatorRef.current === 'sf') syncCamera(sfMap, bostonMap)
     })
-    sfMap.on('pitchend', () => {
+    sfMap.on('moveend', () => {
       if (pitchInitiatorRef.current === 'sf') pitchInitiatorRef.current = null
     })
 
